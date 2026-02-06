@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CRUD Memo (LocalStorage)</title>
+  <style>
+    body{font-family:system-ui, sans-serif; max-width:760px; margin:40px auto; padding:0 16px;}
+    h1{margin:0 0 6px;}
+    .sub{color:#666; margin:0 0 18px;}
+    .row{display:flex; gap:8px; margin-bottom:14px;}
+    input{flex:1; padding:12px; border:1px solid #ccc; border-radius:10px;}
+    button{padding:12px 14px; border:1px solid #ccc; border-radius:10px; background:#fff; cursor:pointer;}
+    button:hover{background:#f5f5f5;}
+    ul{list-style:none; padding:0; margin:0;}
+    li{display:flex; gap:8px; align-items:center; padding:12px; border:1px solid #e2e2e2; border-radius:12px; margin-bottom:10px;}
+    .text{flex:1; white-space:pre-wrap;}
+    .meta{font-size:12px; color:#777; margin-top:2px;}
+    .col{flex:1;}
+    .danger{border-color:#ffb3b3;}
+    .danger:hover{background:#ffecec;}
+    .empty{color:#777; padding:18px; border:1px dashed #ddd; border-radius:12px;}
+    .footer{display:flex; gap:8px; margin-top:14px;}
+  </style>
+</head>
+<body>
+  <h1>CRUD Memo</h1>
+  <p class="sub">Create / Read / Update / Delete (localStorage로 저장됨)</p>
+
+  <div class="row">
+    <input id="memoInput" placeholder="메모 입력 (예: 오늘 할 일)" />
+    <button id="addBtn">추가(Create)</button>
+  </div>
+
+  <ul id="list"></ul>
+
+  <div class="footer">
+    <button id="exportBtn">JSON 내보내기</button>
+    <button id="clearBtn" class="danger">전체 삭제(Delete All)</button>
+  </div>
+
+  <script>
+    const KEY = "crud_memos_v1";
+    const $input = document.getElementById("memoInput");
+    const $addBtn = document.getElementById("addBtn");
+    const $list = document.getElementById("list");
+    const $clearBtn = document.getElementById("clearBtn");
+    const $exportBtn = document.getElementById("exportBtn");
+
+    function load() {
+      try { return JSON.parse(localStorage.getItem(KEY)) ?? []; }
+      catch { return []; }
+    }
+    function save(items) {
+      localStorage.setItem(KEY, JSON.stringify(items));
+    }
+    function formatTime(ts){
+      const d = new Date(ts);
+      const y = d.getFullYear();
+      const m = String(d.getMonth()+1).padStart(2,"0");
+      const day = String(d.getDate()).padStart(2,"0");
+      const hh = String(d.getHours()).padStart(2,"0");
+      const mm = String(d.getMinutes()).padStart(2,"0");
+      return `${y}-${m}-${day} ${hh}:${mm}`;
+    }
+
+    // Read
+    function render() {
+      const items = load();
+      $list.innerHTML = "";
+
+      if (items.length === 0) {
+        const div = document.createElement("div");
+        div.className = "empty";
+        div.textContent = "아직 메모가 없음. 위에서 하나 추가해봐.";
+        $list.appendChild(div);
+        return;
+      }
+
+      items.forEach(item => {
+        const li = document.createElement("li");
+
+        const col = document.createElement("div");
+        col.className = "col";
+
+        const text = document.createElement("div");
+        text.className = "text";
+        text.textContent = item.text; // XSS 방지(textContent)
+
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        meta.textContent = `id: ${item.id} | created: ${formatTime(item.createdAt)} | updated: ${formatTime(item.updatedAt)}`;
+
+        col.appendChild(text);
+        col.appendChild(meta);
+
+        // Update
+        const editBtn = document.createElement("button");
+        editBtn.textContent = "수정(Update)";
+        editBtn.onclick = () => {
+          const next = prompt("수정할 내용 입력:", item.text);
+          if (next === null) return;
+          const v = next.trim();
+          if (!v) return;
+
+          const updated = items.map(x =>
+            x.id === item.id ? { ...x, text: v, updatedAt: Date.now() } : x
+          );
+          save(updated);
+          render();
+        };
+
+        // Delete
+        const delBtn = document.createElement("button");
+        delBtn.textContent = "삭제(Delete)";
+        delBtn.className = "danger";
+        delBtn.onclick = () => {
+          const ok = confirm("진짜 삭제할거야?");
+          if (!ok) return;
+          const filtered = items.filter(x => x.id !== item.id);
+          save(filtered);
+          render();
+        };
+
+        li.appendChild(col);
+        li.appendChild(editBtn);
+        li.appendChild(delBtn);
+        $list.appendChild(li);
+      });
+    }
+
+    // Create
+    function addItem() {
+      const v = $input.value.trim();
+      if (!v) return;
+
+      const items = load();
+      const now = Date.now();
+      items.unshift({
+        id: now,        // 간단하게 timestamp를 id로 사용
+        text: v,
+        createdAt: now,
+        updatedAt: now
+      });
+      save(items);
+      $input.value = "";
+      render();
+    }
+
+    $addBtn.addEventListener("click", addItem);
+    $input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") addItem();
+    });
+
+    // Delete All
+    $clearBtn.addEventListener("click", () => {
+      const ok = confirm("전체 삭제할거야?");
+      if (!ok) return;
+      localStorage.removeItem(KEY);
+      render();
+    });
+
+    // Export JSON 
+    $exportBtn.addEventListener("click", () => {
+      const items = load();
+      const blob = new Blob([JSON.stringify(items, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "memos.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    render();
+  </script>
+</body>
+</html>
